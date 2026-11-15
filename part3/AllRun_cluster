@@ -1,0 +1,159 @@
+#!/bin/bash
+cd "${0%/*}" || exit 1
+
+cleanup_exit() {
+    if [ -n "$MONITOR_PID" ] && kill -0 "$MONITOR_PID" 2>/dev/null; then
+        kill -TERM "$MONITOR_PID" 2>/dev/null || true
+    fi
+    if [ -n "$SOLVER_PID" ] && kill -0 "$SOLVER_PID" 2>/dev/null; then
+        echo -e "\n[!] Caught interrupt signal. Terminating pimpleFoam (PID: $SOLVER_PID)..."
+        kill -TERM "$SOLVER_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup_exit INT TERM
+
+# =============================================================================
+# Part 3: Distributed 2-Node Cluster Execution (8 M2 Pro P-cores + 4 M4 P-cores)
+# =============================================================================
+WORKER_IP="10.0.0.2"
+WORKER_USER="luccaventurini"
+MASTER_CORES=8
+WORKER_CORES=4
+TOTAL_CORES=$((MASTER_CORES + WORKER_CORES))
+CASE_DIR="$(pwd)"
+
+echo "=================================================================="
+echo " Part 3: Transient Wake (pimpleFoam) — 8+4 Cluster Orchestration"
+echo " Case Directory : ${CASE_DIR}"
+echo " Allocation     : ${MASTER_CORES} Master P-cores + ${WORKER_CORES} Worker P-cores = ${TOTAL_CORES} cores"
+echo "=================================================================="
+
+# 1. Source OpenFOAM v2506 Environment (matched across Master & Mac mini)
+if [ -f "/Volumes/OpenFOAM/openfoam2506/etc/bashrc" ]; then
+    source "/Volumes/OpenFOAM/openfoam2506/etc/bashrc" || true
+    export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-$DYLD_LIBRARY_PATH}"
+else
+    echo "[!] Error: /Volumes/OpenFOAM/openfoam2506/etc/bashrc not found on Master."
+    exit 1
+fi
+
+echo "[*] Active OpenFOAM : $WM_PROJECT_DIR"
+echo "[*] Active MPI Path : $MPI_ARCH_PATH"
+
+# 2. Pre-Flight Cluster Connectivity & Mount Check on Worker (10.0.0.2)
+echo "[*] Verifying Thunderbolt bridge & OpenFOAM mount on Worker (${WORKER_IP})..."
+if ! ping -c 1 -W 1000 "${WORKER_IP}" > /dev/null 2>&1; then
+    echo "[!] Error: Cannot ping Worker at ${WORKER_IP}. Check Thunderbolt cable / bridge0 IP."
+    exit 1
+fi
+
+if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "${WORKER_USER}@${WORKER_IP}" "test -d '$WM_PROJECT_DIR'"; then
+    echo "[!] Error: $WM_PROJECT_DIR is not mounted at the identical path on Worker (${WORKER_IP})."
+    exit 1
+fi
+echo "[*] Worker ${WORKER_IP} online and $WM_PROJECT_DIR verified."
+
+# 3. Checkpoint Detection & Resume Check
+pkill -f "monitor_postprocessing.py" 2>/dev/null || true
+
+END_TIME=$(awk '/^[[:space:]]*endTime[[:space:]]+/{gsub(/;/,""); print $2; exit}' system/controlDict)
+EXISTING_PROCS=$(find . -maxdepth 1 -type d -name 'processor[0-9]*' 2>/dev/null | wc -l | tr -d ' ')
+LATEST_CKPT=""
+if [ -d "processor0" ]; then
+    LATEST_CKPT=$(ls -1 processor0 2>/dev/null | grep -E '^[0-9]+(\.[0-9]+)?$' | sort -n | tail -n 1 || true)
+fi
+
+RESUME_RUN=0
+if [ -n "$END_TIME" ] && [ -n "$LATEST_CKPT" ] && [ "$EXISTING_PROCS" -eq "$TOTAL_CORES" ]; then
+    if awk -v t="$LATEST_CKPT" -v end="$END_TIME" 'BEGIN { exit !(t > 0 && t < end) }'; then
+        RESUME_RUN=1
+    fi
+fi
+
+sed -i '' -E 's/^([[:space:]]*startFrom[[:space:]]+)[^;]+;/\1latestTime;/' system/controlDict
+
+# 4. Generate Rigid Hostfile (8 slots on Master, 4 slots on Worker)
+cat <<EOF > cluster_hostfile
+localhost slots=${MASTER_CORES} max_slots=${MASTER_CORES}
+${WORKER_IP} slots=${WORKER_CORES} max_slots=${WORKER_CORES}
+EOF
+
+if [ "$RESUME_RUN" -eq 1 ]; then
+    echo "[+] Detected in-progress checkpoint at t = $LATEST_CKPT (endTime = $END_TIME). Resuming without cleaning..."
+    echo "[*] Syncing system/ and constant/ to Worker (${WORKER_IP}) while preserving checkpoints..."
+    ssh "${WORKER_USER}@${WORKER_IP}" "mkdir -p '${CASE_DIR}'"
+    rsync -a -e ssh \
+        "${CASE_DIR}/constant" \
+        "${CASE_DIR}/system" \
+        "${WORKER_USER}@${WORKER_IP}:${CASE_DIR}/" > log.rsync_out 2>&1
+else
+    # Clean old postProcessing & restore 0/ from 0.orig (Part 2 converged state)
+    rm -rf 0 postProcessing log.pimpleFoam
+    cp -r 0.orig 0
+
+    # Configure 12-Subdomain Scotch Decomposition
+    sed -i '' "s/method.*/method          scotch;/" system/decomposeParDict
+    sed -i '' "s/numberOfSubdomains.*/numberOfSubdomains  ${TOTAL_CORES};/" system/decomposeParDict
+
+    # Local Decomposition on Master Node Only (1.537M cells -> 12 x ~128k cells)
+    echo "[*] Decomposing domain into ${TOTAL_CORES} subdomains locally on Master..."
+    rm -rf processor*
+    decomposePar -force > log.decomposePar 2>&1
+    if [ $? -ne 0 ]; then
+        echo "[!] Error during decomposePar. Check log.decomposePar."
+        exit 1
+    fi
+
+    # Sync Case & Processor Directories to Worker via Thunderbolt
+    echo "[*] Syncing case and processor directories to Worker (${WORKER_IP})..."
+    ssh "${WORKER_USER}@${WORKER_IP}" "mkdir -p '${CASE_DIR}'"
+    rsync -a --delete -e ssh \
+        "${CASE_DIR}/0" \
+        "${CASE_DIR}/constant" \
+        "${CASE_DIR}/system" \
+        "${CASE_DIR}/processor"* \
+        "${WORKER_USER}@${WORKER_IP}:${CASE_DIR}/" > log.rsync_out 2>&1
+fi
+
+# 8. Launch Distributed pimpleFoam over Thunderbolt (10.0.0.0/24)
+# Pin OpenMPI TCP BTL and OOB strictly to the 10.0.0.0/24 Thunderbolt subnet
+MPI_FLAGS="--prefix $MPI_ARCH_PATH --hostfile cluster_hostfile \
+--mca btl_tcp_if_include 10.0.0.0/24 --mca oob_tcp_if_include 10.0.0.0/24 \
+-x PATH -x LD_LIBRARY_PATH -x DYLD_LIBRARY_PATH -x WM_PROJECT_DIR -x FOAM_USER_APPBIN -x FOAM_APPBIN"
+
+echo "[*] Launching distributed pimpleFoam (${TOTAL_CORES} P-cores) in background..."
+if [ "$RESUME_RUN" -eq 1 ]; then
+    mpirun ${MPI_FLAGS} -np ${TOTAL_CORES} --report-bindings pimpleFoam -parallel >> log.pimpleFoam 2>&1 &
+else
+    mpirun ${MPI_FLAGS} -np ${TOTAL_CORES} --report-bindings pimpleFoam -parallel > log.pimpleFoam 2>&1 &
+fi
+SOLVER_PID=$!
+caffeinate -dims -w $SOLVER_PID &
+ssh "${WORKER_USER}@${WORKER_IP}" "nohup caffeinate -dims -t 36000 >/dev/null 2>&1 &"
+echo "    -> pimpleFoam PID: $SOLVER_PID (caffeinate active on Master & Worker)"
+echo "    -> Tail solver output with: tail -f log.pimpleFoam"
+
+# 9. Launch Live Post-Processing Monitor on Master Node
+if command -v python3 &> /dev/null; then
+    echo "[*] Launching live convergence & wake monitor (monitor_postprocessing.py)..."
+    python3 monitor_postprocessing.py --interval 2.0 &
+    MONITOR_PID=$!
+    echo "    -> Monitor PID: $MONITOR_PID"
+fi
+
+# Wait for solver to finish
+wait $SOLVER_PID
+SOLVER_STATUS=$?
+
+if [ $SOLVER_STATUS -eq 0 ]; then
+    echo "[*] Distributed pimpleFoam completed successfully!"
+    echo "[*] Retrieving Worker processor directories (processor8..processor11) via Thunderbolt..."
+    for p in 8 9 10 11; do
+        rsync -a -e ssh "${WORKER_USER}@${WORKER_IP}:${CASE_DIR}/processor${p}" "${CASE_DIR}/" >> log.rsync_in 2>&1
+    done
+    echo "[*] Reconstructing transient time directories on Master..."
+    reconstructPar > log.reconstructPar 2>&1
+    echo "[*] Done! Results reconstructed and summary saved to postProcessing_summary.png"
+else
+    echo "[!] pimpleFoam exited with code $SOLVER_STATUS. Check log.pimpleFoam."
+fi

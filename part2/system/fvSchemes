@@ -1,0 +1,68 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes
+{
+    default         steadyState;
+}
+
+gradSchemes
+{
+    default         Gauss linear;
+
+    // Multi-directional limiter prevents linearUpwind overshoots around sharp cube corners
+    grad(U)         cellMDLimited Gauss linear 1.0;
+
+    // Scalar cell limiters protect SST production and cross-diffusion terms
+    grad(k)         cellLimited Gauss linear 1.0;
+    grad(omega)     cellLimited Gauss linear 1.0;
+}
+
+divSchemes
+{
+    default         none;
+
+    div(phi,U)      bounded Gauss linearUpwind grad(U);
+
+    // Second-order bounded TVD for turbulence
+    div(phi,k)      bounded Gauss limitedLinear 1.0;
+    div(phi,omega)  bounded Gauss limitedLinear 1.0;
+
+    // Viscous stress divergence
+    div((nuEff*dev2(T(grad(U))))) Gauss linear;
+}
+
+laplacianSchemes
+{
+    default         Gauss linear orthogonal;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         orthogonal;
+}
+
+wallDist
+{
+    method          meshWave;
+}
+
+// ************************************************************************* //

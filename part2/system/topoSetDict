@@ -1,0 +1,91 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Cube geometry: 0.05 m x 0.05 m x 0.05 m attached to lower wall (y = 0)
+// Spanwise:   x in [0.075, 0.125] m (centered in 0.20 m duct)
+// Vertical:   y in [0.000, 0.050] m (mounted on bottom wall)
+// Streamwise: z in [0.400, 0.450] m (8 H_cube from inlet, 21 H_cube from outlet)
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+actions
+(
+    // 1. Select all cells belonging to the 50x50x50 mm cube
+    {
+        name    cubeCells;
+        type    cellSet;
+        action  new;
+        source  boxToCell;
+        box     (0.075001 -0.001 0.400001) (0.124999 0.049999 0.449999);
+    }
+
+    // 2. Register cube cellZone (also used as solid region in Parts IV-V CHT)
+    {
+        name    cube;
+        type    cellZoneSet;
+        action  new;
+        source  setToCellZone;
+        set     cubeCells;
+    }
+
+    // 3. Select all active fluid cells (complement of cubeCells)
+    {
+        name    fluidCells;
+        type    cellSet;
+        action  new;
+        source  boxToCell;
+        box     (-1 -1 -1) (2 2 2);
+    }
+    {
+        name    fluidCells;
+        type    cellSet;
+        action  delete;
+        source  cellToCell;
+        set     cubeCells;
+    }
+
+    // 4. Register fluid cellZone
+    {
+        name    fluid;
+        type    cellZoneSet;
+        action  new;
+        source  setToCellZone;
+        set     fluidCells;
+    }
+
+    // 5. Extract outer surface faces of the cube (faceSet & faceZone)
+    {
+        name    cubeFaces;
+        type    faceSet;
+        action  new;
+        source  cellToFace;
+        set     cubeCells;
+        option  outside;
+    }
+    {
+        name    cubeFaces;
+        type    faceSet;
+        action  delete;
+        source  boundaryToFace;
+    }
+    {
+        name    cubeInterface;
+        type    faceZoneSet;
+        action  new;
+        source  setToFaceZone;
+        faceSet cubeFaces;
+    }
+);
+
+// ************************************************************************* //

@@ -1,0 +1,302 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2506                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+FoamFile
+{
+    version         2;
+    format          ascii;
+    class           dictionary;
+    object          controlDict;
+}
+
+application     chtMultiRegionSimpleFoam;
+
+startFrom       latestTime;
+
+startTime       0;
+
+stopAt          endTime;
+
+endTime         15000;
+
+deltaT          1;
+
+writeControl    timeStep;
+
+writeInterval   250;
+
+purgeWrite      3;
+
+writeFormat     binary;
+
+writePrecision  8;
+
+writeCompression off;
+
+timeFormat      general;
+
+timePrecision   6;
+
+runTimeModifiable true;
+
+functions
+{
+    residualsFluid
+    {
+        type            solverInfo;
+        libs            ( "libutilityFunctionObjects.so" );
+        region          fluid;
+        writeControl    timeStep;
+        writeInterval   1;
+        fields          ( p_rgh U k omega h );
+    }
+    residualsSolid
+    {
+        type            solverInfo;
+        libs            ( "libutilityFunctionObjects.so" );
+        region          solid;
+        writeControl    timeStep;
+        writeInterval   1;
+        fields          ( h );
+    }
+    massFlowInlet
+    {
+        type            surfaceFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        writeControl    timeStep;
+        writeInterval   10;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            inlet;
+        operation       sum;
+        fields          ( phi );
+    }
+    massFlowOutlet
+    {
+        type            surfaceFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        writeControl    timeStep;
+        writeInterval   10;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            outlet;
+        operation       sum;
+        fields          ( phi );
+    }
+    inletPressure
+    {
+        type            surfaceFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        writeControl    timeStep;
+        writeInterval   10;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            inlet;
+        operation       areaAverage;
+        fields          ( p );
+    }
+    outletPressure
+    {
+        type            surfaceFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        writeControl    timeStep;
+        writeInterval   10;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            outlet;
+        operation       areaAverage;
+        fields          ( p );
+    }
+    pressureUpstreamCube
+    {
+        type            surfaceFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        writeControl    timeStep;
+        writeInterval   50;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      sampledSurface;
+        name            zUpstream030;
+        operation       areaAverage;
+        fields          ( p );
+        sampledSurfaceDict
+        {
+            type            cuttingPlane;
+            planeType       pointAndNormal;
+            pointAndNormalDict
+            {
+                point           ( 0.1 0.1 0.3 );
+                normal          ( 0 0 1 );
+            }
+            interpolate     true;
+        }
+    }
+    pressureDownstreamCube
+    {
+        type            surfaceFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        writeControl    timeStep;
+        writeInterval   50;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      sampledSurface;
+        name            zDownstream055;
+        operation       areaAverage;
+        fields          ( p );
+        sampledSurfaceDict
+        {
+            type            cuttingPlane;
+            planeType       pointAndNormal;
+            pointAndNormalDict
+            {
+                point           ( 0.1 0.1 0.55 );
+                normal          ( 0 0 1 );
+            }
+            interpolate     true;
+        }
+    }
+    inletTemperatureMix
+    {
+        type            surfaceFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        writeControl    timeStep;
+        writeInterval   10;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            inlet;
+        operation       weightedAverage;
+        weightField     phi;
+        fields          ( T h );
+    }
+    outletTemperatureMix
+    {
+        type            surfaceFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        writeControl    timeStep;
+        writeInterval   10;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            outlet;
+        operation       weightedAverage;
+        weightField     phi;
+        fields          ( T h );
+    }
+    interfaceTempFluid
+    {
+        type            surfaceFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        writeControl    timeStep;
+        writeInterval   10;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            fluid_to_solid;
+        operation       areaAverage;
+        fields          ( T );
+    }
+    interfaceTempSolid
+    {
+        type            surfaceFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          solid;
+        writeControl    timeStep;
+        writeInterval   10;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            solid_to_fluid;
+        operation       areaAverage;
+        fields          ( T );
+    }
+    solidTempAvg
+    {
+        type            volFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          solid;
+        writeControl    timeStep;
+        writeInterval   10;
+        writeFields     false;
+        regionType      all;
+        operation       volAverage;
+        fields          ( T h );
+    }
+    fluidTempExtrema
+    {
+        type            fieldMinMax;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        writeControl    timeStep;
+        writeInterval   10;
+        mode            component;
+        fields          ( T p );
+    }
+    solidTempExtrema
+    {
+        type            fieldMinMax;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          solid;
+        writeControl    timeStep;
+        writeInterval   10;
+        mode            component;
+        fields          ( T );
+    }
+    wallHeatFlux
+    {
+        type            wallHeatFlux;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        patches         ( fluid_to_solid walls );
+        writeControl    writeTime;
+    }
+    yPlus
+    {
+        type            yPlus;
+        libs            ( "libfieldFunctionObjects.so" );
+        region          fluid;
+        writeControl    writeTime;
+        patches         ( walls fluid_to_solid );
+    }
+    fluidProbes
+    {
+        type            probes;
+        libs            ( "libsampling.so" );
+        region          fluid;
+        writeControl    timeStep;
+        writeInterval   10;
+        fields          ( U p T );
+        probeLocations  ( ( 0.1 0.025 0.3 ) ( 0.1 0.06 0.425 ) ( 0.1 0.025 0.475 ) ( 0.1 0.025 0.55 ) ( 0.1 0.025 0.65 ) ( 0.1 0.025 1 ) ( 0.1 0.001 0.451 ) );
+    }
+    solidProbes
+    {
+        type            probes;
+        libs            ( "libsampling.so" );
+        region          solid;
+        writeControl    timeStep;
+        writeInterval   10;
+        fields          ( T );
+        probeLocations  ( ( 0.1 0.025 0.425 ) ( 0.1 0.002 0.425 ) ( 0.1 0.048 0.425 ) );
+    }
+}
+
+
+// ************************************************************************* //

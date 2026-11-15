@@ -1,0 +1,40 @@
+# macOS & Python caches
+.DS_Store
+**/.DS_Store
+__pycache__/
+*.py[cod]
+
+# LaTeX build intermediates (keep report.tex and report.pdf)
+report.aux
+report.log
+report.out
+report.toc
+report.fls
+report.fdb_latexmk
+report.synctex.gz
+
+# OpenFOAM solver outputs, decompositions, generated meshes, and logs
+part[1-5]/processor*/
+part[1-5]/postProcessing/
+part[1-5]/dynamicCode/
+part[1-5]/VTK/
+part[1-5]/0/
+part[1-5]/[1-9]*/
+part[1-5]/0.[0-9]*/
+part[1-5]/constant/polyMesh/
+part[1-5]/constant/*/polyMesh/
+part[1-5]/constant/cellToRegion
+part[1-5]/log.*
+part[1-5]/*.log
+part[1-5]/*.foam
+part[1-5]/cluster_hostfile
+part[1-5]/results/
+
+# Raw uncropped ParaView screenshot (24 MB; report uses figures/fig7_boundary_layer_paraview_cropped.png)
+figures/fig7_boundary_layer_paraview.png
+
+# Optional: uncomment the two lines below for an ultra-light (<15 MB) GitHub repository.
+# Without these initialized baselines, run Parts I->V sequentially via ./scripts/runAll
+# or copy converged fields from part2/5000 -> part3/0.orig and part4/15000 -> part5/0.orig.
+# part3/0.orig/
+# part5/0.orig/

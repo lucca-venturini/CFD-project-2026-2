@@ -1,0 +1,115 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+scale   0.001; // mm to m
+
+vertices
+(
+    (0 0 0)         // 0
+    (200 0 0)       // 1
+    (200 200 0)     // 2
+    (0 200 0)       // 3
+    (0 0 1500)      // 4
+    (200 0 1500)    // 5
+    (200 200 1500)  // 6
+    (0 200 1500)    // 7
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (104 96 156)
+    simpleGrading
+    (
+        // x-direction (200 mm total, 104 cells):
+        // Exact grid planes at x = 75 mm and x = 125 mm (cube lateral faces)
+        // Low-Re sublayer resolution at duct walls (dx_1 = 0.030 mm) and cube walls (dx_1 = 0.025 mm)
+        (
+            (37.5 20 329.450451)    // [0, 37.5 mm]: left duct wall (0.030 mm) to mid-gap (9.88 mm)
+            (37.5 20 0.002454)      // [37.5, 75 mm]: mid-gap (10.19 mm) to cube left face (0.025 mm)
+            (25.0 12 423.558592)    // [75, 100 mm]: cube left face (0.025 mm) to cube center (10.59 mm)
+            (25.0 12 0.002361)      // [100, 125 mm]: cube center (10.59 mm) to cube right face (0.025 mm)
+            (37.5 20 407.485210)    // [125, 162.5 mm]: cube right face (0.025 mm) to mid-gap (10.19 mm)
+            (37.5 20 0.003035)      // [162.5, 200 mm]: mid-gap (9.88 mm) to right duct wall (0.030 mm)
+        )
+
+        // y-direction (200 mm total, 96 cells):
+        // Exact grid plane at y = 50 mm (cube top face)
+        // Low-Re sublayer resolution at bottom wall (0.030 mm), cube roof (0.025 mm), and top wall (0.030 mm)
+        (
+            (25.0 18 228.659048)    // [0, 25 mm]: bottom wall (0.030 mm) to mid-cube height (6.86 mm)
+            (25.0 18 0.003529)      // [25, 50 mm]: mid-cube (7.08 mm) to cube top face (0.025 mm)
+            (75.0 30 593.787261)    // [50, 125 mm]: cube top face (0.025 mm) into upper channel (14.84 mm)
+            (75.0 30 0.002082)      // [125, 200 mm]: upper channel (14.41 mm) to top wall (0.030 mm)
+        )
+
+        // z-direction (1500 mm total, 156 cells):
+        // Exact grid planes at z = 400 mm (cube front) and z = 450 mm (cube rear)
+        // Low-Re sublayer resolution at cube front/rear faces (dz_1 = 0.025 mm) + wake resolution
+        (
+            (350.0 28 1.000000)     // [0, 350 mm]: inlet approach (12.50 mm uniform)
+            (50.0  22 0.001941)     // [350, 400 mm]: upstream boundary-layer grading (12.88 -> 0.025 mm)
+            (25.0  12 423.558592)   // [400, 425 mm]: cube leading face (0.025 mm) to cube mid-plane
+            (25.0  12 0.002361)     // [425, 450 mm]: cube mid-plane to cube trailing face (0.025 mm)
+            (50.0  22 515.187605)   // [450, 500 mm]: rear cube wall boundary layer (0.025 -> 12.88 mm)
+            (350.0 35 1.000000)     // [500, 850 mm]: primary wake & recirculation zone (10.00 mm uniform)
+            (650.0 25 2.200000)     // [850, 1500 mm]: far wake recovery to outlet
+        )
+    )
+);
+
+edges
+(
+);
+
+boundary
+(
+    inlet
+    {
+        type patch;
+        faces
+        (
+            (0 3 2 1)
+        );
+    }
+    outlet
+    {
+        type patch;
+        faces
+        (
+            (4 5 6 7)
+        );
+    }
+    walls
+    {
+        type wall;
+        faces
+        (
+            (0 4 7 3)   // x = 0
+            (1 2 6 5)   // x = 200
+            (0 1 5 4)   // y = 0
+            (3 7 6 2)   // y = 200
+        );
+    }
+    cube
+    {
+        type wall;
+        faces
+        (
+        );
+    }
+);
+
+// ************************************************************************* //

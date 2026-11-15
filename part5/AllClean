@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# Part V Cleanup Script: Transient Conjugate Heat Transfer (chtMultiRegionFoam)
+# Removes transient time outputs, processor dirs, logs, and postProcessing while
+# preserving constant/polyMesh, constant/fluid/polyMesh, and constant/solid/polyMesh.
+# -----------------------------------------------------------------------------
+cd "${0%/*}" || exit 1
+set -e
+
+if [ ! -f "system/controlDict" ]; then
+    echo "[-] Error: 'system/controlDict' not found. Run this script from part5 root." >&2
+    exit 1
+fi
+
+echo "[*] Cleaning Part V transient CHT case..."
+
+rm -rf [1-9]* 0.[0-9]* 0 postProcessing processor* log.* *.log VTK dynamicCode __pycache__ *.pyc cluster_hostfile
+
+if [ -d "0.orig" ]; then
+    echo "[*] Restoring '0/' from initialized unheated baseline ('0.orig/')..."
+    cp -r 0.orig 0
+fi
+
+echo "[+] Part V case cleaned (preserved constant/{fluid,solid}/polyMesh)."

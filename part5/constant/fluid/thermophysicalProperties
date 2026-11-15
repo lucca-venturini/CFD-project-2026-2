@@ -1,0 +1,55 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      thermophysicalProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Water reference properties matching Project Spec Section 6 (Page 6):
+// rho = 1000 kg/m^3, cp = 4184 J/(kg.K), mu = 8.90e-4 Pa.s,
+// kappa_f = 0.607 W/(m.K) => Pr = mu * cp / kappa_f = 6.135
+// -------------------------------------------------------------------------
+
+thermoType
+{
+    type            heRhoThermo;
+    mixture         pureMixture;
+    transport       const;
+    thermo          hConst;
+    equationOfState rhoConst;
+    specie          specie;
+    energy          sensibleEnthalpy;
+}
+
+mixture
+{
+    specie
+    {
+        nMoles          1;
+        molWeight       18.015;
+    }
+    equationOfState
+    {
+        rho             1000.0;
+    }
+    thermodynamics
+    {
+        Cp              4184.0;
+        Hf              0;
+    }
+    transport
+    {
+        mu              8.90e-04;
+        Pr              6.135;
+    }
+}
+
+// ************************************************************************* //

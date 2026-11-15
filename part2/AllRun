@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# Integrated OpenFOAM Execution Pipeline (AllRun - Part II: Cube Insertion)
+# Workflow: Clean -> blockMesh -> topoSet -> subsetMesh -> checkMesh -> decomposePar -> simpleFoam
+# -----------------------------------------------------------------------------
+cd "${0%/*}" || exit 1
+
+if [ -f "/Volumes/OpenFOAM/openfoam2506/etc/bashrc" ]; then
+    source "/Volumes/OpenFOAM/openfoam2506/etc/bashrc" || true
+fi
+
+set -e
+
+cleanup_exit() {
+    if [ -n "$MONITOR_PID" ] && kill -0 "$MONITOR_PID" 2>/dev/null; then
+        kill -TERM "$MONITOR_PID" 2>/dev/null || true
+    fi
+    if [ -n "$SOLVER_PID" ] && kill -0 "$SOLVER_PID" 2>/dev/null; then
+        echo -e "\n[!] Caught exit signal. Terminating solver (PID: $SOLVER_PID)..."
+        kill -TERM "$SOLVER_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup_exit INT TERM
+
+if [ ! -f "system/controlDict" ]; then
+    echo "[-] Error: 'system/controlDict' not found. Run this script from the case root." >&2
+    exit 1
+fi
+
+pkill -f "monitor_postprocessing.py" 2>/dev/null || true
+
+NUM_PROCS=$(awk '/^[[:space:]]*numberOfSubdomains[[:space:]]+/{gsub(/;/,""); print $2; exit}' system/decomposeParDict)
+END_TIME=$(awk '/^[[:space:]]*endTime[[:space:]]+/{gsub(/;/,""); print $2; exit}' system/controlDict)
+EXISTING_PROCS=$(find . -maxdepth 1 -type d -name 'processor[0-9]*' 2>/dev/null | wc -l | tr -d ' ')
+LATEST_CKPT=""
+if [ -d "processor0" ]; then
+    LATEST_CKPT=$(ls -1 processor0 2>/dev/null | grep -E '^[0-9]+(\.[0-9]+)?$' | sort -n | tail -n 1 || true)
+fi
+
+RESUME_RUN=0
+if [ -n "$NUM_PROCS" ] && [ -n "$END_TIME" ] && [ -n "$LATEST_CKPT" ] && [ "$EXISTING_PROCS" -eq "$NUM_PROCS" ]; then
+    if awk -v t="$LATEST_CKPT" -v end="$END_TIME" 'BEGIN { exit !(t > 0 && t < end) }'; then
+        RESUME_RUN=1
+    fi
+fi
+
+sed -i '' -E 's/^([[:space:]]*startFrom[[:space:]]+)[^;]+;/\1latestTime;/' system/controlDict
+
+if [ "$RESUME_RUN" -eq 1 ]; then
+    echo "=========================================================="
+    echo " [+] Detected in-progress checkpoint at t = $LATEST_CKPT (endTime = $END_TIME). Resuming without cleaning..."
+    echo "=========================================================="
+else
+    # -----------------------------------------------------------------------------
+    # 1. CLEAN
+    # -----------------------------------------------------------------------------
+    echo "=========================================================="
+    echo " [1/7] Cleaning case directory"
+    echo "=========================================================="
+    rm -rf [1-9]* 0.[0-9]* 0 postProcessing processor* log.* *.log VTK constant/polyMesh
+
+    # -----------------------------------------------------------------------------
+    # 2. MESH GENERATION (blockMesh)
+    # -----------------------------------------------------------------------------
+    echo "=========================================================="
+    echo " [2/7] Generating multi-graded structured mesh: blockMesh"
+    echo "=========================================================="
+    if ! blockMesh > log.blockMesh 2>&1; then
+        echo "[-] Fatal: blockMesh failed. Check log.blockMesh for details." >&2
+        exit 1
+    fi
+    echo " [+] blockMesh completed successfully."
+
+    # -----------------------------------------------------------------------------
+    # 3. TOPOLOGICAL SELECTION (topoSet)
+    # -----------------------------------------------------------------------------
+    echo "=========================================================="
+    echo " [3/7] Defining cube cellSet, cellZone, faceSet, faceZone: topoSet"
+    echo "=========================================================="
+    if ! topoSet > log.topoSet 2>&1; then
+        echo "[-] Fatal: topoSet failed. Check log.topoSet for details." >&2
+        exit 1
+    fi
+    echo " [+] topoSet completed successfully."
+
+    # -----------------------------------------------------------------------------
+    # 4. OBSTACLE EXTRACTION (subsetMesh)
+    # -----------------------------------------------------------------------------
+    echo "=========================================================="
+    echo " [4/7] Creating cube obstacle & surface patches: subsetMesh"
+    echo "=========================================================="
+    if ! subsetMesh fluidCells -patch cube -overwrite > log.subsetMesh 2>&1; then
+        echo "[-] Fatal: subsetMesh failed. Check log.subsetMesh for details." >&2
+        exit 1
+    fi
+    echo " [+] subsetMesh completed: cube volume carved out and assigned to patch 'cube'."
+
+    # Restore 0/ from 0.orig/ after mesh topology is finalized
+    cp -r 0.orig 0
+
+    # -----------------------------------------------------------------------------
+    # 5. MESH VERIFICATION (checkMesh)
+    # -----------------------------------------------------------------------------
+    echo "=========================================================="
+    echo " [5/7] Verifying mesh quality and patch orientation: checkMesh"
+    echo "=========================================================="
+    if ! checkMesh > log.checkMesh 2>&1; then
+        echo "[-] Warning: checkMesh reported issues. Inspect log.checkMesh." >&2
+    fi
+    echo " [+] checkMesh completed (see log.checkMesh)."
+
+    # -----------------------------------------------------------------------------
+    # 6. DOMAIN DECOMPOSITION (decomposePar)
+    # -----------------------------------------------------------------------------
+    echo "=========================================================="
+    echo " [6/7] Decomposing domain: decomposePar"
+    echo "=========================================================="
+    if ! decomposePar > log.decomposePar 2>&1; then
+        echo "[-] Fatal: decomposePar failed. Check log.decomposePar for details." >&2
+        exit 1
+    fi
+    echo " [+] Decomposition completed ($NUM_PROCS subdomains created)."
+fi
+
+# -----------------------------------------------------------------------------
+# 7. SOLVER EXECUTION (mpirun simpleFoam)
+# -----------------------------------------------------------------------------
+echo "=========================================================="
+echo " [7/7] Launching solver: mpirun -np $NUM_PROCS simpleFoam -parallel"
+echo "=========================================================="
+if [ "$RESUME_RUN" -eq 1 ]; then
+    mpirun -np "$NUM_PROCS" simpleFoam -parallel >> log.simpleFoam 2>&1 &
+else
+    mpirun -np "$NUM_PROCS" simpleFoam -parallel > log.simpleFoam 2>&1 &
+fi
+SOLVER_PID=$!
+caffeinate -dims -w "$SOLVER_PID" >/dev/null 2>&1 &
+echo " [*] Solver running in background (PID: $SOLVER_PID)."
+echo " [*] Tail solver output with: tail -f log.simpleFoam"
+
+if command -v python3 >/dev/null 2>&1 && [ -f "monitor_postprocessing.py" ]; then
+    sleep 2
+    python3 monitor_postprocessing.py &
+    MONITOR_PID=$!
+    echo " [*] Live monitor attached (PID: $MONITOR_PID)."
+fi
+
+SOLVER_STATUS=0
+wait "$SOLVER_PID" || SOLVER_STATUS=$?
+if [ $SOLVER_STATUS -eq 0 ]; then
+    echo " [+] Solver execution finished."
+else
+    echo " [-] Solver exited with code $SOLVER_STATUS. Check log.simpleFoam."
+    exit "$SOLVER_STATUS"
+fi

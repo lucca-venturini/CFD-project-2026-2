@@ -1,0 +1,114 @@
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# Part IV: Steady Conjugate Heat Transfer (chtMultiRegionSimpleFoam)
+# Pipeline: Clean -> blockMesh -> topoSet -> splitMeshRegions -> checkMesh -> decomposePar -> chtMultiRegionSimpleFoam
+# -----------------------------------------------------------------------------
+cd "${0%/*}" || exit 1
+
+if [ -f "/Volumes/OpenFOAM/openfoam2506/etc/bashrc" ]; then
+    source "/Volumes/OpenFOAM/openfoam2506/etc/bashrc" || true
+fi
+
+set -e
+
+cleanup_exit() {
+    if [ -n "$MONITOR_PID" ] && kill -0 "$MONITOR_PID" 2>/dev/null; then
+        kill -TERM "$MONITOR_PID" 2>/dev/null || true
+    fi
+    if [ -n "$SOLVER_PID" ] && kill -0 "$SOLVER_PID" 2>/dev/null; then
+        echo -e "\n[!] Caught interrupt signal. Terminating solver (PID: $SOLVER_PID)..."
+        kill -TERM "$SOLVER_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup_exit INT TERM
+
+echo "=========================================================="
+echo " Part IV: Steady CHT (chtMultiRegionSimpleFoam)"
+echo "=========================================================="
+
+if [ ! -f "system/controlDict" ] || [ ! -f "system/decomposeParDict" ]; then
+    echo "[-] Error: 'system/controlDict' or 'system/decomposeParDict' not found." >&2
+    exit 1
+fi
+
+pkill -f "monitor_postprocessing.py" 2>/dev/null || true
+
+NUM_PROCS=$(awk '/^[[:space:]]*numberOfSubdomains[[:space:]]+/{gsub(/;/,""); print $2; exit}' system/decomposeParDict)
+END_TIME=$(awk '/^[[:space:]]*endTime[[:space:]]+/{gsub(/;/,""); print $2; exit}' system/controlDict)
+EXISTING_PROCS=$(find . -maxdepth 1 -type d -name 'processor[0-9]*' 2>/dev/null | wc -l | tr -d ' ')
+LATEST_CKPT=""
+if [ -d "processor0" ]; then
+    LATEST_CKPT=$(ls -1 processor0 2>/dev/null | grep -E '^[0-9]+(\.[0-9]+)?$' | sort -n | tail -n 1 || true)
+fi
+
+if [ -z "$NUM_PROCS" ] || [ "$NUM_PROCS" -lt 1 ]; then
+    echo "[-] Error: Unable to determine valid 'numberOfSubdomains' from system/decomposeParDict." >&2
+    exit 1
+fi
+
+RESUME_RUN=0
+if [ -n "$END_TIME" ] && [ -n "$LATEST_CKPT" ] && [ "$EXISTING_PROCS" -eq "$NUM_PROCS" ]; then
+    if awk -v t="$LATEST_CKPT" -v end="$END_TIME" 'BEGIN { exit !(t > 0 && t < end) }'; then
+        RESUME_RUN=1
+    fi
+fi
+
+sed -i '' -E 's/^([[:space:]]*startFrom[[:space:]]+)[^;]+;/\1latestTime;/' system/controlDict
+
+if [ "$RESUME_RUN" -eq 1 ]; then
+    echo "[+] Detected in-progress checkpoint at t = $LATEST_CKPT (endTime = $END_TIME). Resuming without cleaning..."
+else
+    ./AllClean
+
+    echo "[1/6] blockMesh..."
+    blockMesh > log.blockMesh 2>&1
+
+    echo "[2/6] topoSet (defining fluid & solid cellZones)..."
+    topoSet > log.topoSet 2>&1
+
+    echo "[3/6] splitMeshRegions -cellZones -overwrite..."
+    splitMeshRegions -cellZones -overwrite > log.splitMeshRegions 2>&1
+
+    # Restore coupled initial & boundary conditions AFTER splitMeshRegions creates region patches
+    rm -rf 0
+    mkdir -p 0
+    cp -r 0.orig/fluid 0/fluid
+    cp -r 0.orig/solid 0/solid
+
+    echo "[4/6] checkMesh -allRegions..."
+    checkMesh -allRegions > log.checkMesh 2>&1 || true
+
+    echo "[5/6] decomposePar -allRegions ($NUM_PROCS subdomains)..."
+    decomposePar -allRegions -force > log.decomposePar 2>&1
+fi
+
+echo "[6/6] Launching mpirun -np $NUM_PROCS chtMultiRegionSimpleFoam -parallel..."
+if [ "$RESUME_RUN" -eq 1 ]; then
+    mpirun -np "$NUM_PROCS" chtMultiRegionSimpleFoam -parallel >> log.chtMultiRegionSimpleFoam 2>&1 &
+else
+    mpirun -np "$NUM_PROCS" chtMultiRegionSimpleFoam -parallel > log.chtMultiRegionSimpleFoam 2>&1 &
+fi
+SOLVER_PID=$!
+caffeinate -dims -w "$SOLVER_PID" >/dev/null 2>&1 &
+echo "    -> Solver PID: $SOLVER_PID (caffeinate active)"
+echo "    -> Monitor with: tail -f log.chtMultiRegionSimpleFoam"
+
+if command -v python3 >/dev/null 2>&1 && [ -f "monitor_postprocessing.py" ]; then
+    sleep 2
+    echo "    -> Launching live thermal & convergence monitor (monitor_postprocessing.py)..."
+    python3 monitor_postprocessing.py --interval 1.5 &
+    MONITOR_PID=$!
+    echo "    -> Monitor PID: $MONITOR_PID"
+fi
+
+SOLVER_STATUS=0
+wait "$SOLVER_PID" || SOLVER_STATUS=$?
+
+if [ "$SOLVER_STATUS" -eq 0 ]; then
+    echo "[*] Solver finished! Running reconstructPar -allRegions -latestTime..."
+    reconstructPar -allRegions -latestTime > log.reconstructPar 2>&1
+    echo "[+] Part IV complete and latest time reconstructed."
+else
+    echo "[!] chtMultiRegionSimpleFoam exited with code $SOLVER_STATUS. Check log.chtMultiRegionSimpleFoam."
+    exit "$SOLVER_STATUS"
+fi

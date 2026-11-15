@@ -1,0 +1,198 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     pimpleFoam;
+
+startFrom       startTime;
+
+startTime       0.5;
+
+stopAt          endTime;
+
+// 0.50 s = 10 cube convective turnovers (H_c / U_b) from converged Part II state
+endTime         2.0;
+
+deltaT          0.00005;
+
+writeControl    adjustableRunTime;
+
+writeInterval   0.05;
+
+purgeWrite      0;
+
+writeFormat     binary;
+
+writePrecision  8;
+
+writeCompression off;
+
+timeFormat      general;
+
+timePrecision   6;
+
+runTimeModifiable true;
+
+// Conservative adaptive time stepping (maxCo 6.0 verified 100% stable in log)
+adjustTimeStep  yes;
+maxCo           6.0;
+maxDeltaT       0.0001;
+
+functions
+{
+    // -------------------------------------------------------------------------
+    // 1. Courant Number Field & History (Demonstrates Time-Step Adequacy)
+    // -------------------------------------------------------------------------
+    courantNo
+    {
+        type            CourantNo;
+        libs            ("libfieldFunctionObjects.so");
+        executeControl  timeStep;
+        executeInterval 1;
+        writeControl    writeTime;
+    }
+
+    courantExtrema
+    {
+        type            fieldMinMax;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   1;
+        mode            magnitude;
+        fields          (Co U p k);
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. Wake & Shear-Layer Probes (Upstream, Above Cube, Wake Centerline, Wall)
+    // -------------------------------------------------------------------------
+    wakeProbes
+    {
+        type            probes;
+        libs            ("libsampling.so");
+        writeControl    timeStep;
+        writeInterval   1;
+        fields          (U p k);
+        probeLocations
+        (
+            (0.100 0.025 0.300)   // P0: Upstream freestream (2.0 H_c ahead of cube)
+            (0.100 0.005 0.380)   // P1: Upstream lower-wall horseshoe vortex (0.4 H_c ahead)
+            (0.100 0.060 0.425)   // P2: Above cube roof in separated shear layer (z = 0.425 m)
+            (0.100 0.025 0.475)   // P3: Immediately downstream in near wake (0.5 H_c behind)
+            (0.100 0.025 0.550)   // P4: Wake centerline recirculation core (2.0 H_c behind)
+            (0.100 0.025 0.650)   // P5: Wake centerline reattachment zone (4.0 H_c behind)
+            (0.100 0.025 0.850)   // P6: Wake centerline recovery region (8.0 H_c behind)
+            (0.100 0.003 0.550)   // P7: Near lower wall in wake (y = 3 mm, z = 0.550 m)
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. Time-Averaged & Fluctuating Fields (Mean & Prime2Mean after t = 0.5 s)
+    // -------------------------------------------------------------------------
+    fieldAverage
+    {
+        type            fieldAverage;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        timeStart       0.10;
+        restartOnRestart false;
+        fields
+        (
+            U
+            {
+                mean        on;
+                prime2Mean  on;
+                base        time;
+            }
+            p
+            {
+                mean        on;
+                prime2Mean  on;
+                base        time;
+            }
+            k
+            {
+                mean        on;
+                prime2Mean  off;
+                base        time;
+            }
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. Integral Pressure & Mass Flux Monitors
+    // -------------------------------------------------------------------------
+    inletPressure
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   5;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            inlet;
+        operation       areaAverage;
+        fields          (p);
+    }
+
+    massFlowInlet
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   5;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            inlet;
+        operation       sum;
+        fields          (phi);
+    }
+
+    massFlowOutlet
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   5;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            outlet;
+        operation       sum;
+        fields          (phi);
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. Wall Resolution & Shear Stress
+    // -------------------------------------------------------------------------
+    yPlus
+    {
+        type            yPlus;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        patches         (walls cube);
+    }
+
+    wallShearStress
+    {
+        type            wallShearStress;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        patches         (walls cube);
+    }
+}
+
+// ************************************************************************* //

@@ -1,0 +1,63 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Partition full domain into coupled CHT cellZones matching constant/regionProperties:
+//   - solid: 0.05 x 0.05 x 0.05 m heated cube (20,736 cells, V_s = 1.25e-4 m^3)
+//   - fluid: surrounding water duct (1,536,768 cells, V_f = 0.059875 m^3)
+// -------------------------------------------------------------------------
+
+actions
+(
+    {
+        name    solidCells;
+        type    cellSet;
+        action  new;
+        source  boxToCell;
+        box     (0.075001 -0.001 0.400001) (0.124999 0.049999 0.449999);
+    }
+
+    {
+        name    solid;
+        type    cellZoneSet;
+        action  new;
+        source  setToCellZone;
+        set     solidCells;
+    }
+
+    {
+        name    fluidCells;
+        type    cellSet;
+        action  new;
+        source  boxToCell;
+        box     (-1 -1 -1) (2 2 2);
+    }
+    {
+        name    fluidCells;
+        type    cellSet;
+        action  delete;
+        source  cellToCell;
+        set     solidCells;
+    }
+
+    {
+        name    fluid;
+        type    cellZoneSet;
+        action  new;
+        source  setToCellZone;
+        set     fluidCells;
+    }
+);
+
+// ************************************************************************* //

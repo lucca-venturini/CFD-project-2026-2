@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# ----------------------------------------------------------------------
+# OpenFOAM Case Cleanup Script (Part III: Transient Wake - pimpleFoam)
+# Resets transient time directories while preserving converged 0.orig/ state
+# ----------------------------------------------------------------------
+set -e
+
+if [ ! -f "system/controlDict" ]; then
+    echo "[-] Error: 'system/controlDict' not found. Run this script from the case root." >&2
+    exit 1
+fi
+
+echo "[*] Cleaning Part III transient case..."
+
+rm -rf [1-9]* 0.[0-9]* 0
+if [ -d "0.orig" ]; then
+    echo "[*] Restoring '0/' from converged Part II baseline ('0.orig/')..."
+    cp -r 0.orig 0
+fi
+
+rm -rf postProcessing processor* log.* *.log VTK dynamicCode __pycache__ *.pyc
+
+echo "[+] Part III case cleaned and restored to t = 0 (converged simpleFoam state)."

@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# Integrated OpenFOAM Execution Pipeline (AllRun - Part III: Transient Wake)
+# Initializes from converged Part II simpleFoam field and runs pimpleFoam
+# -----------------------------------------------------------------------------
+cd "${0%/*}" || exit 1
+
+if [ -f "/Volumes/OpenFOAM/openfoam2506/etc/bashrc" ]; then
+    source "/Volumes/OpenFOAM/openfoam2506/etc/bashrc" || true
+fi
+
+set -e
+
+cleanup_exit() {
+    if [ -n "$MONITOR_PID" ] && kill -0 "$MONITOR_PID" 2>/dev/null; then
+        kill -TERM "$MONITOR_PID" 2>/dev/null || true
+    fi
+    if [ -n "$SOLVER_PID" ] && kill -0 "$SOLVER_PID" 2>/dev/null; then
+        echo -e "\n[!] Caught interrupt signal. Terminating pimpleFoam (PID: $SOLVER_PID)..."
+        kill -TERM "$SOLVER_PID" 2>/dev/null || true
+    fi
+}
+trap cleanup_exit INT TERM
+
+if [ ! -f "system/controlDict" ]; then
+    echo "[-] Error: 'system/controlDict' not found. Run this script from the case root." >&2
+    exit 1
+fi
+
+pkill -f "monitor_postprocessing.py" 2>/dev/null || true
+
+NUM_PROCS=$(awk '/^[[:space:]]*numberOfSubdomains[[:space:]]+/{gsub(/;/,""); print $2; exit}' system/decomposeParDict)
+END_TIME=$(awk '/^[[:space:]]*endTime[[:space:]]+/{gsub(/;/,""); print $2; exit}' system/controlDict)
+EXISTING_PROCS=$(find . -maxdepth 1 -type d -name 'processor[0-9]*' 2>/dev/null | wc -l | tr -d ' ')
+LATEST_CKPT=""
+if [ -d "processor0" ]; then
+    LATEST_CKPT=$(ls -1 processor0 2>/dev/null | grep -E '^[0-9]+(\.[0-9]+)?$' | sort -n | tail -n 1 || true)
+fi
+
+RESUME_RUN=0
+if [ -n "$NUM_PROCS" ] && [ -n "$END_TIME" ] && [ -n "$LATEST_CKPT" ] && [ "$EXISTING_PROCS" -eq "$NUM_PROCS" ]; then
+    if awk -v t="$LATEST_CKPT" -v end="$END_TIME" 'BEGIN { exit !(t > 0 && t < end) }'; then
+        RESUME_RUN=1
+    fi
+fi
+
+sed -i '' -E 's/^([[:space:]]*startFrom[[:space:]]+)[^;]+;/\1latestTime;/' system/controlDict
+
+if [ "$RESUME_RUN" -eq 1 ]; then
+    echo "=========================================================="
+    echo " [+] Detected in-progress checkpoint at t = $LATEST_CKPT (endTime = $END_TIME). Resuming without cleaning..."
+    echo "=========================================================="
+else
+    # -----------------------------------------------------------------------------
+    # 1. CLEAN TRANSIENT OUTPUTS & RESTORE CONVERGED PART II INITIAL CONDITION
+    # -----------------------------------------------------------------------------
+    echo "=========================================================="
+    echo " [1/5] Preparing Part III initialized from Part II (t = 0)"
+    echo "=========================================================="
+    rm -rf [1-9]* 0.[0-9]* 0 postProcessing processor* log.* *.log VTK
+    cp -r 0.orig 0
+
+    # -----------------------------------------------------------------------------
+    # 2. ENSURE MESH IS PRESENT (COPY FROM PART II OR BUILD)
+    # -----------------------------------------------------------------------------
+    if [ ! -f "constant/polyMesh/points" ]; then
+        echo "=========================================================="
+        echo " [2/5] Building mesh (blockMesh -> topoSet -> subsetMesh)"
+        echo "=========================================================="
+        blockMesh > log.blockMesh 2>&1
+        topoSet > log.topoSet 2>&1
+        subsetMesh fluidCells -patch cube -overwrite > log.subsetMesh 2>&1
+        cp -r 0.orig 0
+    else
+        echo " [2/5] Verified obstructed mesh in constant/polyMesh (1,536,768 cells)."
+    fi
+
+    # -----------------------------------------------------------------------------
+    # 3. MESH CHECK
+    # -----------------------------------------------------------------------------
+    echo "=========================================================="
+    echo " [3/5] Running checkMesh"
+    echo "=========================================================="
+    checkMesh > log.checkMesh 2>&1 || true
+
+    # -----------------------------------------------------------------------------
+    # 4. DOMAIN DECOMPOSITION (decomposePar)
+    # -----------------------------------------------------------------------------
+    echo "=========================================================="
+    echo " [4/5] Decomposing domain: decomposePar"
+    echo "=========================================================="
+    decomposePar > log.decomposePar 2>&1
+    echo " [+] Decomposed into $NUM_PROCS subdomains."
+fi
+
+# -----------------------------------------------------------------------------
+# 5. LAUNCH TRANSIENT SOLVER (mpirun pimpleFoam)
+# -----------------------------------------------------------------------------
+echo "=========================================================="
+echo " [5/5] Launching solver: mpirun -np $NUM_PROCS pimpleFoam -parallel"
+echo "=========================================================="
+if [ "$RESUME_RUN" -eq 1 ]; then
+    mpirun -np "$NUM_PROCS" pimpleFoam -parallel >> log.pimpleFoam 2>&1 &
+else
+    mpirun -np "$NUM_PROCS" pimpleFoam -parallel > log.pimpleFoam 2>&1 &
+fi
+SOLVER_PID=$!
+caffeinate -dims -w "$SOLVER_PID" >/dev/null 2>&1 &
+echo " [*] pimpleFoam running in background (PID: $SOLVER_PID)."
+echo " [*] Tail solver output with: tail -f log.pimpleFoam"
+
+if command -v python3 >/dev/null 2>&1 && [ -f "monitor_postprocessing.py" ]; then
+    sleep 2
+    python3 monitor_postprocessing.py &
+    MONITOR_PID=$!
+    echo " [*] Live monitor attached (PID: $MONITOR_PID)."
+fi
+
+SOLVER_STATUS=0
+wait "$SOLVER_PID" || SOLVER_STATUS=$?
+if [ $SOLVER_STATUS -eq 0 ]; then
+    echo " [+] Transient simulation finished."
+else
+    echo " [-] pimpleFoam exited with code $SOLVER_STATUS. Check log.pimpleFoam."
+    exit "$SOLVER_STATUS"
+fi

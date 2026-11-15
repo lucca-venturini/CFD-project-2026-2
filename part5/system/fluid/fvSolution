@@ -1,0 +1,94 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    rho
+    {
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-08;
+        relTol          0;
+    }
+
+    rhoFinal
+    {
+        $rho;
+        tolerance       1e-08;
+        relTol          0;
+    }
+
+    p_rgh
+    {
+        solver          GAMG;
+        tolerance       1e-08;
+        relTol          0.01;
+        smoother        DICGaussSeidel;
+        agglomerator    faceAreaPair;
+        nCellsInCoarsestLevel 100;
+    }
+
+    p_rghFinal
+    {
+        $p_rgh;
+        tolerance       1e-08;
+        relTol          0.001;
+    }
+
+    "(U|h|e|k|omega)"
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-08;
+        relTol          0.01;
+    }
+
+    "(U|h|e|k|omega)Final"
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-08;
+        relTol          0.001;
+    }
+}
+
+PIMPLE
+{
+    momentumPredictor           yes;
+    nOuterCorrectors            2;
+    nCorrectors                 2;
+    nNonOrthogonalCorrectors    0;
+    pRefCell                    0;
+    pRefValue                   101325;
+}
+
+relaxationFactors
+{
+    fields
+    {
+        p_rgh           0.7;
+        p_rghFinal      1.0;
+        rho             1.0;
+        rhoFinal        1.0;
+    }
+    equations
+    {
+        "(U|h|e|k|omega)"       0.8;
+        "(U|h|e|k|omega)Final"  1.0;
+    }
+}
+
+// ************************************************************************* //

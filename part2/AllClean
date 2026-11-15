@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# ----------------------------------------------------------------------
+# OpenFOAM Case Cleanup Script (Part II: Cube Obstruction)
+# Safely resets the directory for repeated simulation runs.
+# ----------------------------------------------------------------------
+set -e
+
+if [ ! -f "system/controlDict" ]; then
+    echo "[-] Error: 'system/controlDict' not found. Run this script from the OpenFOAM case root." >&2
+    exit 1
+fi
+
+echo "[*] Cleaning OpenFOAM case..."
+
+rm -rf [1-9]* 0.[0-9]* 0
+if [ -d "0.orig" ]; then
+    echo "[*] Restoring '0/' from '0.orig/'..."
+    cp -r 0.orig 0
+fi
+
+rm -rf postProcessing processor* constant/polyMesh
+rm -rf log.* *.log VTK dynamicCode __pycache__ *.pyc
+
+echo "[+] Case cleaned successfully. Ready for execution."

@@ -1,0 +1,39 @@
+================================================================================
+PART V: TRANSIENT CONJUGATE HEAT TRANSFER (chtMultiRegionFoam) — SUMMARY
+================================================================================
+1. SETUP & NUMERICAL STABILITY (t in [0.00, 20.00] ms, 400 steps, dt = 50 us)
+   - Initial State             : Converged unheated flow + T0 = 298.15 K (25.00 C)
+   - Continuous Heat Source    : q''' = 2.68e+10 W/m^3 => Q_gen = 3.3500 MW
+   - Time Integration Scheme   : Implicit Euler; PIMPLE (2 outer, 2 inner correctors)
+   - Fluid Courant Number      : Co_mean = 0.00589 | Co_max = 3.8533
+   - Solid Diffusion Number    : Di_mean = 0.07320 | Di_max = 4.0006
+   - Mass Conservation Error   : eps_m <= 4.763e-04% (m_dot = 40.0000 kg/s)
+
+2. BOILING-TEMPERATURE THRESHOLD & HOTSPOT LOCATION
+   - Local Pressure Assumption : p_in = 101.448 kPa, p_out = 101.325 kPa, p_if,max = 101.945 kPa
+   - Saturation Threshold      : T_sat(1 atm) = 373.15 K | T_sat(p_if,max) = 373.32 K (100.17 C)
+   - First Interface Crossing  : t_boil = 12.3852 ms (0.012385 s; step 248 at 12.40 ms)
+   - At 1 atm (373.15 K)       : t_boil = 12.3565 ms (0.012357 s)
+   - First Fluid Cell (12.5um) : t_boil,cell = 16.5094 ms (0.016509 s)
+   - Hotspot Location          : (x, y, z) = (75.00, 0.81, 448.77) mm
+                                 (Lower trailing edge on left cube face in stagnant corner)
+   - 1D Analytical Benchmark   : t_boil,1D = 12.4843 ms (deviation = 0.79%)
+
+3. THERMAL STATE & TRANSIENT ENERGY BALANCE (at t = t_boil vs. t = 20.00 ms)
+   - At t = 12.40 ms (step 248):
+       Fluid T_max             : 373.41 K (100.26 C)
+       Cube T_max / T_volAvg   : 381.23 K / 381.00 K
+       Interface T_avg         : 372.88 K
+       Q_interface / dEs_dt    : 14.68 kW / 3.3353 MW
+       E_solid / E_fluid       : 41.423 kJ (99.72%) / 107.92 J (0.26%)
+   - At t = 20.00 ms (step 400):
+       Fluid T_max (interface) : 419.51 K (146.36 C)
+       Fluid T_max (cell-ctr)  : 392.42 K (119.27 C)
+       Cube T_max / T_volAvg   : 432.15 K / 431.66 K
+       Cube T_min / Interface  : 383.15 K / 418.33 K
+       Outlet T_out,mix        : 298.1500 K (Delta T_mix = 0.0000 K, Q_rem = 0.33 W)
+       Instantaneous Powers    : Q_gen = 3.3500 MW | dEs/dt = 3.3310 MW | dEf/dt = 17.15 kW | Q_if = 18.97 kW
+       Inst. Energy Imbalance  : 0.0544%
+       Cumulative Energies     : E_gen = 67.0000 kJ | E_solid = 66.7547 kJ (99.63%) | E_fluid = 226.26 J (0.34%)
+       Cum. Energy Imbalance   : 0.0284% (Integrated Q_interface = 244.82 J)
+================================================================================

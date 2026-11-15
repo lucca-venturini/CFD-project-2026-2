@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# Master Post-Processing Driver (scripts/postProcessAll)
+# Regenerates CSV data tables in data/ and publication figures in figures/
+# Usage: ./scripts/postProcessAll [1 2 3 4 5]
+# -----------------------------------------------------------------------------
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+PARTS=("$@")
+if [ ${#PARTS[@]} -eq 0 ]; then
+    PARTS=(1 2 3 4 5)
+fi
+
+for part in "${PARTS[@]}"; do
+    script="$ROOT_DIR/generate_part${part}_results.py"
+    if [ ! -f "$script" ]; then
+        echo "[-] Missing post-processing script: $script" >&2
+        exit 1
+    fi
+    echo "=== Post-processing Part $part ($script) ==="
+    python3 "$script"
+done
+
+echo "[+] Post-processing completed for parts: ${PARTS[*]}"

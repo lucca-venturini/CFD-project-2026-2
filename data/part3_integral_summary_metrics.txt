@@ -1,0 +1,39 @@
+================================================================================
+PART III: TRANSIENT WAKE DEVELOPMENT (pimpleFoam) — SUMMARY METRICS
+================================================================================
+1. TIME-STEP ADEQUACY & COURANT HISTORY
+   - Time Integration Scheme     : Blended Crank-Nicolson (0.5) for U/p, Euler for k/omega
+   - Physical Simulation Window  : t in [0.00, 2.00] s (40.0 H_c / U_b convective units)
+   - Time-Averaging Window       : t in [0.10, 2.00] s (38.0 H_c / U_b convective units)
+   - Adaptive Time Step deltaT   : 7.715257e-05 s (~76.8 us)
+   - Domain-Mean Courant Number  : 0.00928
+   - Wake & Shear-Layer Co       : 0.030 - 0.045 (<< 1.0)
+   - Max Sublayer Corner Co      : 6.000 (confined to 25 um cube corner cell)
+   - Continuity Imbalance eps_m  : 2.925000e-05 %
+   - Duct Walls y+ (Avg / Max)   : 0.7305 / 2.7778
+   - Cube Patch y+ (Avg / Max)   : 0.9451 / 3.2469
+
+2. WAKE UNSTEADINESS, DOMINANT FREQUENCY & STROUHAL NUMBER
+   - Wake Regime Classification  : UNSTEADY 3D VORTEX SHEDDING (spontaneous symmetry breaking)
+   - Probe 5 (z=0.65m) Ux Range  : [-0.1557, +0.2801] m/s (RMS = 0.1168 m/s)
+   - Probe 4 (z=0.55m) Uz Range  : [-0.4521, -0.3159] m/s (Mean = -0.3972 m/s)
+   - Dominant Lateral Freq f_x   : 2.000 Hz (Zero-crossing mean f_x = 1.886 Hz, T = 0.530 s)
+   - Dominant Streamwise Freq f_z: 2.667 Hz
+   - Lateral Strouhal Number St_x: 0.1000 (Zero-crossing St_x = 0.0943)
+   - Streamwise Strouhal St_z    : 0.1333
+   - Literature Benchmark St     : 0.100 - 0.140 (Martinuzzi & Tropea 1993; Sakamoto & Arie 1983)
+
+3. STEADY (PART II) vs. TIME-AVERAGED (PART III) vs. INSTANTANEOUS (t = 2.0 s)
+   - Upstream Separation L_up    : Steady = 52.98 mm (1.06 H_c) | Time-Avg = 45.26 mm (0.91 H_c) | Inst = 48.10 mm (0.96 H_c)
+   - Wake Reattachment Point z_R : Steady = 0.6251 m | Time-Avg = 0.6331 m | Inst = 0.6307 m
+   - Wake Recirculation L_r      : Steady = 175.11 mm (3.50 H_c) | Time-Avg = 183.12 mm (3.66 H_c) | Inst = 180.74 mm (3.61 H_c)
+   - Dynamic Wake Breathing Range: L_r(t) in [167.53, 193.11] mm (3.35 - 3.86 H_c), std = 5.60 mm
+   - Total Duct Pressure Drop dP : Steady = 111.76 Pa | Time-Avg = 135.57 Pa | Inst(t=2.0s) = 137.34 Pa
+   - Additional Cube Loss dP_cube: Steady = 36.27 Pa (K=0.0725) | Time-Avg = 60.08 Pa (K=0.1202)
+   - Max Velocity Magnitude |U|  : Steady = 1.3304 m/s | Time-Avg = 1.3152 m/s | Inst = 1.3233 m/s
+   - Max Reverse Velocity Uz_min : Steady = -0.7135 m/s | Time-Avg = -0.7500 m/s | Inst = -0.7433 m/s
+   - Max Modeled TKE k           : Steady = 0.08458 m^2/s^2 | Time-Avg kMean = 0.08254 m^2/s^2 | Inst k = 0.08275 m^2/s^2
+   - Max Resolved TKE k_res      : 0.11114 m^2/s^2 (max RMS |u'| = 0.4715 m/s)
+   - Max Combined Total TKE      : 0.12775 m^2/s^2
+   - Max Pressure Fluctuation    : p'_rms,max = 110.29 Pa
+================================================================================

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+cd "${0%/*}" || exit 1
+rm -rf [1-9]* 0.[0-9]* 0 postProcessing processor* log.* *.log VTK constant/polyMesh constant/cellToRegion constant/fluid/polyMesh constant/solid/polyMesh cluster_hostfile
+echo "[+] Cleaned part4 case directory."

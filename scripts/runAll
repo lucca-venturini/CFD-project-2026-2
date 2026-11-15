@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# Master Execution Driver (scripts/runAll)
+# Runs OpenFOAM Parts I-V sequentially (or a selected subset, e.g.: ./scripts/runAll 1 2)
+# -----------------------------------------------------------------------------
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [ -f "/Volumes/OpenFOAM/openfoam2506/etc/bashrc" ]; then
+    # shellcheck disable=SC1091
+    source "/Volumes/OpenFOAM/openfoam2506/etc/bashrc" || true
+fi
+
+PARTS=("$@")
+if [ ${#PARTS[@]} -eq 0 ]; then
+    PARTS=(1 2 3 4 5)
+fi
+
+for part in "${PARTS[@]}"; do
+    case "$part" in
+        1)
+            echo "=== Running Part I: Empty Square Duct (simpleFoam) ==="
+            (cd "$ROOT_DIR/part1" && printf "y\n\n" | ./AllRun)
+            ;;
+        2)
+            echo "=== Running Part II: Steady Cube Obstruction (simpleFoam) ==="
+            (
+                cd "$ROOT_DIR/part2"
+                ./AllRun
+                if [ -d "processor0" ]; then
+                    echo " [*] Reconstructing latest time for Part II..."
+                    reconstructPar -latestTime > log.reconstructPar 2>&1
+                fi
+            )
+            ;;
+        3)
+            echo "=== Running Part III: Transient Cube Wake (pimpleFoam) ==="
+            (
+                cd "$ROOT_DIR/part3"
+                ./AllRun
+                if [ -d "processor0" ]; then
+                    echo " [*] Reconstructing written times for Part III..."
+                    reconstructPar -newTimes > log.reconstructPar 2>&1
+                fi
+            )
+            ;;
+        4)
+            echo "=== Running Part IV: Steady CHT (chtMultiRegionSimpleFoam) ==="
+            (cd "$ROOT_DIR/part4" && ./AllRun)
+            ;;
+        5)
+            echo "=== Running Part V: Transient CHT (chtMultiRegionFoam) ==="
+            (cd "$ROOT_DIR/part5" && ./AllRun)
+            ;;
+        *)
+            echo "[-] Unknown part '$part'. Valid values: 1 2 3 4 5" >&2
+            exit 1
+            ;;
+    esac
+done
+
+echo "[+] Requested OpenFOAM run(s) completed."

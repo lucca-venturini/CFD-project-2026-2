@@ -1,0 +1,35 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvOptions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Prescribed uniform volumetric heat source in the solid cube (V_s = 1.25e-4 m^3)
+// q''' = 2.68e10 W/m^3 => Q = q''' * V_s = 3.35e6 W (20 K mixed-mean water rise)
+// Energy variable for heSolidThermo with sensibleEnthalpy is 'h'.
+// -------------------------------------------------------------------------
+
+cubeHeating
+{
+    type            scalarSemiImplicitSource;
+    active          true;
+
+    selectionMode   all;
+    volumeMode      specific;
+
+    sources
+    {
+        h           (2.68e10 0);
+    }
+}
+
+// ************************************************************************* //

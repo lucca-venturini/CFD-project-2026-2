@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# Master Cleanup Driver (scripts/cleanAll)
+# Invokes ./AllClean across Parts I-V (or selected parts: ./scripts/cleanAll 3 5)
+# -----------------------------------------------------------------------------
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+PARTS=("$@")
+if [ ${#PARTS[@]} -eq 0 ]; then
+    PARTS=(1 2 3 4 5)
+fi
+
+for part in "${PARTS[@]}"; do
+    case_dir="$ROOT_DIR/part$part"
+    if [ ! -x "$case_dir/AllClean" ]; then
+        echo "[-] Missing executable AllClean in $case_dir" >&2
+        exit 1
+    fi
+    echo "=== Cleaning Part $part ==="
+    (cd "$case_dir" && ./AllClean)
+done
+
+echo "[+] Requested cleanup(s) complete."

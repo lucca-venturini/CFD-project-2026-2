@@ -1,0 +1,130 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2606                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     simpleFoam;
+
+startFrom       startTime;
+
+startTime       0;
+
+stopAt          endTime;
+
+endTime         3000;
+
+deltaT          1;
+
+writeControl    timeStep;
+
+writeInterval   200;
+
+purgeWrite      3;
+
+writeFormat     binary;
+
+writePrecision  8;
+
+writeCompression off;
+
+timeFormat      general;
+
+timePrecision   6;
+
+runTimeModifiable true;
+
+functions
+{
+    // -------------------------------------------------------------------------
+    // 1. Residual Tracking (logged each iteration to postProcessing/residuals)
+    // -------------------------------------------------------------------------
+    residuals
+    {
+        type            solverInfo;
+        libs            ("libutilityFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   1;
+        fields          (p U k omega);
+    }
+
+
+    // -------------------------------------------------------------------------
+    // 2. Physical Convergence: Area-averaged Inlet Pressure (Delta P tracking)
+    // -------------------------------------------------------------------------
+    inletPressure
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   5;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            inlet;
+        operation       areaAverage;
+        fields          (p);
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. Physical Convergence: Mass Flux Balance (phi)
+    // -------------------------------------------------------------------------
+    massFlowInlet
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   5;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            inlet;
+        operation       sum;
+        fields          (phi);
+    }
+
+    massFlowOutlet
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   5;
+        writeFields     false;
+        surfaceFormat   none;
+        regionType      patch;
+        name            outlet;
+        operation       sum;
+        fields          (phi);
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. Boundary Layer Verification: y+ and Wall Shear Stress
+    // -------------------------------------------------------------------------
+    yPlus
+    {
+        type            yPlus;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        patches         (walls);
+    }
+
+    wallShearStress
+    {
+        type            wallShearStress;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        patches         (walls);
+    }
+}
+
+// ************************************************************************* //

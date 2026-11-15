@@ -1,0 +1,52 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      T;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 0 1 0 0 0];
+
+internalField   uniform 298.15;
+
+boundaryField
+{
+    #includeEtc "caseDicts/setConstraintTypes"
+
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 298.15;
+    }
+
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform 298.15;
+        value           uniform 298.15;
+    }
+
+    walls
+    {
+        type            zeroGradient; // Adiabatic external duct walls (-n . k gradT = 0)
+    }
+
+    fluid_to_solid
+    {
+        type            compressible::turbulentTemperatureCoupledBaffleMixed;
+        Tnbr            T;
+        kappaMethod     fluidThermo;
+        value           uniform 298.15;
+    }
+}
+
+// ************************************************************************* //

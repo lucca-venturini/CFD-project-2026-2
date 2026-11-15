@@ -1,0 +1,33 @@
+metric,value
+V_solid_mesh [m^3],1.25000000e-04
+A_interface_mesh [m^2],1.25000000e-02
+q_volumetric_fvOptions [W/m^3],2.680000e+10
+Q_fvOptions [MW],3.350000
+Q_analytical_20K_target [MW],3.347200
+eps_source_discrepancy [%],0.0837
+dT_analytical_from_Q_fvOptions [K],20.0167
+mdot_in [kg/s],-40.0000000
+mdot_out [kg/s],40.0000059
+eps_mass_imbalance [%],1.475000e-05
+T_in_mix [K],298.1500
+T_out_mix [K],318.0293
+dT_mix [K],19.8793
+Q_interface [MW],3.351210
+Q_removed_coolant [MW],3.326995
+eps_Q_interface_vs_fvOptions [%],0.0361
+eps_Q_removed_vs_fvOptions [%],0.6867
+eps_Q_removed_vs_20K_ref [%],0.6036
+T_interface_avg [K],68489.49
+T_solid_volAvg [K],113705.63
+T_solid_max [K],178171.61
+T_solid_min [K],13771.30
+T_fluid_max [K],108872.34
+T_fluid_min [K],298.14
+dP_duct_total [Pa],121.4490
+dP_across_cube [Pa],223.5380
+yPlus_walls_arith_avg,0.7295
+yPlus_walls_area_avg,0.7580
+yPlus_walls_max,2.8025
+yPlus_cube_arith_avg,0.9176
+yPlus_cube_area_avg,0.5207
+yPlus_cube_max,3.1662
